@@ -496,15 +496,18 @@ function retryErrors() { files.filter(f=>f.status==='error').forEach(f=>{f.statu
 
 // ─── PDF Splitting ────────────────────────────────────────────────────────────
 async function splitPdfIntoChunks(file, pagesPerChunk) {
-  // Load the PDF with pdf.js to count pages
-  const arrayBuffer = await file.arrayBuffer();
-  const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-  const totalPages = pdfDoc.numPages;
-
-  // Dynamic import of pdf-lib for splitting
   const { PDFDocument } = await loadPdfLib();
 
-  const srcDoc = await PDFDocument.load(arrayBuffer);
+  // Read file fresh into a new Uint8Array to avoid detached buffer issues
+  const arrayBuffer = await readFileAsArrayBuffer(file);
+  const uint8 = new Uint8Array(arrayBuffer);
+
+  // Count pages using pdf.js with a copy of the data
+  const pdfDoc = await pdfjsLib.getDocument({ data: uint8.slice() }).promise;
+  const totalPages = pdfDoc.numPages;
+
+  // Load with pdf-lib using another copy
+  const srcDoc = await PDFDocument.load(uint8.slice());
   const chunks = [];
 
   for (let start = 0; start < totalPages; start += pagesPerChunk) {
@@ -521,9 +524,20 @@ async function splitPdfIntoChunks(file, pagesPerChunk) {
       pages: `${start+1}-${end+1}`,
       status: 'pending',
     });
+    // Free memory between chunks
+    await sleep(50);
   }
 
   return chunks;
+}
+
+function readFileAsArrayBuffer(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => resolve(e.target.result);
+    reader.onerror = () => reject(new Error('Falha ao ler arquivo'));
+    reader.readAsArrayBuffer(file);
+  });
 }
 
 // Lazy-load pdf-lib from CDN
