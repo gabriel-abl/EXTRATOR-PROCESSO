@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Extrator de Processos Judiciais · RFG</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap');
+
+:root {
+  --bg: #0a0a0f;
+  --surface: #12121a;
+  --surface2: #1a1a26;
+  --border: #2a2a3d;
+  --accent: #6c63ff;
+  --accent2: #00d4aa;
+  --text: #e8e8f0;
+  --text-dim: #7878a0;
+  --text-bright: #ffffff;
+  --success: #00d4aa;
+  --warning: #ffb347;
+  --error: #ff6b6b;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'DM Mono', monospace; background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; }
+body::before { content: ''; position: fixed; inset: 0; background: radial-gradient(ellipse 80% 50% at 20% 20%, rgba(108,99,255,0.08) 0%, transparent 60%), radial-gradient(ellipse 60% 40% at 80% 80%, rgba(0,212,170,0.06) 0%, transparent 60%); pointer-events: none; z-index: 0; }
+.container { max-width: 1140px; margin: 0 auto; padding: 0 24px; position: relative; z-index: 1; }
+
+header { padding: 40px 0 28px; border-bottom: 1px solid var(--border); margin-bottom: 40px; }
+.header-inner { display: flex; align-items: center; gap: 16px; }
+.logo { width: 46px; height: 46px; background: linear-gradient(135deg, var(--accent), var(--accent2)); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; }
+.header-text h1 { font-family: 'Syne', sans-serif; font-size: 26px; font-weight: 800; color: var(--text-bright); letter-spacing: -0.5px; }
+.header-text p { font-size: 12px; color: var(--text-dim); margin-top: 3px; }
+.badge { margin-left: auto; background: rgba(108,99,255,0.15); border: 1px solid rgba(108,99,255,0.3); color: var(--accent); font-size: 11px; padding: 4px 12px; border-radius: 20px; white-space: nowrap; }
+
+.section { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 26px; margin-bottom: 20px; }
+.section-title { font-family: 'Syne', sans-serif; font-size: 12px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: 2px; margin-bottom: 18px; display: flex; align-items: center; gap: 10px; }
+.section-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+.drop-zone { border: 2px dashed var(--border); border-radius: 12px; padding: 40px 24px; text-align: center; cursor: pointer; transition: all 0.25s ease; position: relative; overflow: hidden; }
+.drop-zone::before { content: ''; position: absolute; inset: 0; background: linear-gradient(135deg, rgba(108,99,255,0.04), rgba(0,212,170,0.03)); opacity: 0; transition: opacity 0.25s; }
+.drop-zone:hover, .drop-zone.drag-over { border-color: var(--accent); transform: translateY(-1px); }
+.drop-zone:hover::before, .drop-zone.drag-over::before { opacity: 1; }
+.drop-icon { font-size: 36px; margin-bottom: 12px; display: block; }
+.drop-zone h3 { font-family: 'Syne', sans-serif; font-size: 17px; font-weight: 700; color: var(--text-bright); margin-bottom: 6px; }
+.drop-zone p { font-size: 12px; color: var(--text-dim); }
+.drop-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+.file-list { margin-top: 16px; display: flex; flex-direction: column; gap: 6px; max-height: 380px; overflow-y: auto; }
+.file-list::-webkit-scrollbar { width: 4px; }
+.file-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.file-item { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 9px 14px; display: flex; align-items: center; gap: 10px; animation: slideIn 0.2s ease; }
+@keyframes slideIn { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:translateY(0)} }
+.file-icon { font-size: 16px; flex-shrink: 0; }
+.file-info { flex: 1; min-width: 0; }
+.file-name { font-size: 12px; color: var(--text-bright); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.file-meta { font-size: 10px; color: var(--text-dim); margin-top: 2px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.file-progress { height: 2px; background: var(--border); border-radius: 1px; margin-top: 5px; overflow: hidden; display: none; }
+.file-progress.vis { display: block; }
+.file-progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); width: 0%; transition: width 0.5s; animation: ppulse 1.5s infinite; }
+@keyframes ppulse { 0%,100%{opacity:1}50%{opacity:0.6} }
+.file-status { font-size: 10px; padding: 2px 8px; border-radius: 20px; font-weight: 500; flex-shrink: 0; }
+.s-pending   { background: rgba(120,120,160,0.12); color: var(--text-dim); }
+.s-queued    { background: rgba(255,179,71,0.12); color: var(--warning); }
+.s-processing{ background: rgba(108,99,255,0.15); color: var(--accent); }
+.s-retrying  { background: rgba(255,179,71,0.15); color: var(--warning); animation: pulse 1.2s infinite; }
+.s-done      { background: rgba(0,212,170,0.12); color: var(--success); }
+.s-error     { background: rgba(255,107,107,0.12); color: var(--error); }
+@keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.5} }
+.file-remove { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 14px; padding: 3px; border-radius: 4px; transition: color 0.2s; flex-shrink: 0; }
+.file-remove:hover { color: var(--error); }
+
+.config-grid { display: grid; grid-template-columns: 1fr 160px 160px; gap: 16px; align-items: end; }
+.field-label { font-size: 11px; color: var(--text-dim); display: block; margin-bottom: 6px; letter-spacing: 0.5px; }
+input[type="password"], input[type="number"] { width: 100%; background: var(--surface2); border: 1px solid var(--border); color: var(--text-bright); font-family: 'DM Mono', monospace; font-size: 13px; padding: 9px 14px; border-radius: 8px; outline: none; transition: border-color 0.2s; }
+input[type="number"] { text-align: center; }
+input:focus { border-color: var(--accent); }
+
+.btn { font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700; padding: 10px 22px; border-radius: 9px; border: none; cursor: pointer; transition: all 0.2s ease; display: inline-flex; align-items: center; gap: 7px; letter-spacing: 0.2px; white-space: nowrap; }
+.btn-primary { background: linear-gradient(135deg, var(--accent), #8b5cf6); color: white; box-shadow: 0 4px 18px rgba(108,99,255,0.3); }
+.btn-primary:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(108,99,255,0.4); }
+.btn-primary:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+.btn-success { background: linear-gradient(135deg, var(--accent2), #00a085); color: #0a0a0f; box-shadow: 0 4px 18px rgba(0,212,170,0.25); }
+.btn-success:hover { transform: translateY(-2px); }
+.btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
+.btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+.actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+
+.progress-wrapper { margin-top: 16px; }
+.progress-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.progress-label { font-size: 12px; color: var(--text-dim); }
+.progress-count { font-size: 12px; color: var(--text-bright); font-weight: 500; }
+.progress-bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+.progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 3px; transition: width 0.4s ease; width: 0%; }
+
+.slots-row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.slot { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 7px 12px; font-size: 11px; min-width: 150px; display: flex; align-items: center; gap: 6px; transition: border-color 0.3s; }
+.slot.active { border-color: var(--accent); }
+.slot.done { border-color: var(--success); }
+.slot-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--border); flex-shrink: 0; transition: background 0.3s; }
+.slot.active .slot-dot { background: var(--accent); animation: pulse 1s infinite; }
+.slot.done .slot-dot { background: var(--success); }
+.slot-name { color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; }
+.slot.active .slot-name { color: var(--text-bright); }
+
+.log-area { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; max-height: 150px; overflow-y: auto; font-size: 11px; color: var(--text-dim); line-height: 1.9; margin-top: 12px; }
+.log-area::-webkit-scrollbar { width: 3px; }
+.log-area::-webkit-scrollbar-thumb { background: var(--border); }
+.log-line { display: flex; gap: 8px; }
+.log-line.ok .log-msg { color: var(--success); }
+.log-line.err .log-msg { color: var(--error); }
+.log-line.warn .log-msg { color: var(--warning); }
+.log-line.info .log-msg { color: var(--accent); }
+.log-time { color: var(--text-dim); flex-shrink: 0; opacity: 0.7; }
+
+.stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 14px; margin-bottom: 22px; }
+.stat-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; padding: 14px 18px; }
+.stat-value { font-family: 'Syne', sans-serif; font-size: 26px; font-weight: 800; color: var(--text-bright); }
+.stat-label { font-size: 10px; color: var(--text-dim); margin-top: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+.results-section { display: none; }
+.results-section.visible { display: block; }
+.table-wrapper { overflow-x: auto; border-radius: 10px; border: 1px solid var(--border); }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+thead tr { background: var(--surface2); border-bottom: 1px solid var(--border); }
+th { padding: 9px 14px; text-align: left; color: var(--text-dim); font-weight: 500; white-space: nowrap; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+tbody tr { border-bottom: 1px solid rgba(42,42,61,0.5); transition: background 0.15s; }
+tbody tr:hover { background: rgba(108,99,255,0.04); }
+tbody tr:last-child { border-bottom: none; }
+td { padding: 9px 14px; color: var(--text); max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+td.pnum { font-family: 'DM Mono', monospace; color: var(--accent); font-size: 11px; }
+.tag { font-size: 10px; padding: 2px 8px; border-radius: 20px; }
+.tag-fase { background: rgba(108,99,255,0.12); color: var(--accent); }
+.tag-result { background: rgba(0,212,170,0.1); color: var(--accent2); }
+.sec-tag { font-size: 10px; padding: 1px 7px; border-radius: 10px; background: rgba(108,99,255,0.1); color: var(--accent); border: 1px solid rgba(108,99,255,0.2); }
+.expand-btn { background: none; border: 1px solid var(--border); color: var(--text-dim); font-size: 11px; padding: 3px 8px; border-radius: 6px; cursor: pointer; transition: all 0.2s; font-family: 'DM Mono', monospace; }
+.expand-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 100; align-items: center; justify-content: center; padding: 20px; }
+.modal-overlay.open { display: flex; }
+.modal { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; width: 100%; max-width: 820px; max-height: 88vh; overflow-y: auto; animation: modalIn 0.22s ease; }
+@keyframes modalIn { from{opacity:0;transform:scale(0.95) translateY(8px)} to{opacity:1;transform:scale(1) translateY(0)} }
+.modal-header { padding: 18px 22px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; background: var(--surface); z-index: 10; }
+.modal-header h3 { font-family: 'Syne', sans-serif; font-size: 15px; font-weight: 700; color: var(--text-bright); }
+.modal-close { background: none; border: none; color: var(--text-dim); font-size: 18px; cursor: pointer; padding: 4px; border-radius: 6px; transition: color 0.2s; }
+.modal-close:hover { color: var(--error); }
+.modal-body { padding: 22px; }
+.sg { margin-bottom: 20px; }
+.sg-title { font-family: 'Syne', sans-serif; font-size: 11px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 2px; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid rgba(108,99,255,0.15); }
+.fg { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.fi { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; }
+.fl { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px; }
+.fv { font-size: 13px; color: var(--text-bright); word-break: break-word; }
+.fv.t { color: var(--success); }
+.fv.f { color: var(--error); opacity: 0.5; }
+
+.spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid rgba(255,255,255,0.2); border-top-color: white; border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; }
+@keyframes spin { to{transform:rotate(360deg)} }
+
+@media(max-width:640px){.config-grid{grid-template-columns:1fr}.fg{grid-template-columns:1fr}.actions{flex-direction:column}.btn{width:100%;justify-content:center}}
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div class="header-inner">
+      <div class="logo">⚖️</div>
+      <div class="header-text">
+        <h1>Extrator de Processos</h1>
+        <p>Extração automática via IA · 20+ PDFs em paralelo · Dashboard RFG</p>
+      </div>
+      <span class="badge">v2.0 · RFG</span>
+    </div>
+  </header>
+
+  <div class="section">
+    <div class="section-title">01 · Upload de PDFs</div>
+    <div class="drop-zone" id="dropZone">
+      <span class="drop-icon">📂</span>
+      <h3>Arraste os PDFs aqui</h3>
+      <p>Múltiplos arquivos · Petição inicial, Sentença, Acórdão, Laudo pericial</p>
+      <input type="file" id="fileInput" accept=".pdf" multiple>
+    </div>
+    <div class="file-list" id="fileList"></div>
+    <div id="fileCount" style="font-size:11px;color:var(--text-dim);margin-top:10px;display:none;"></div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">02 · Configuração</div>
+    <div class="config-grid">
+      <div>
+        <label class="field-label">ANTHROPIC API KEY</label>
+        <input type="password" id="apiKey" placeholder="sk-ant-...">
+      </div>
+      <div>
+        <label class="field-label">PARALELO (máx. 5)</label>
+        <input type="number" id="concurrency" value="3" min="1" max="5">
+      </div>
+      <div>
+        <label class="field-label">TENTATIVAS P/ ERRO</label>
+        <input type="number" id="maxRetry" value="2" min="1" max="5">
+      </div>
+    </div>
+    <div style="margin-top:12px;display:flex;align-items:center;gap:8px;">
+      <input type="checkbox" id="saveKey" style="accent-color:var(--accent);">
+      <label for="saveKey" style="font-size:12px;color:var(--text);cursor:pointer;">Lembrar API key neste navegador</label>
+    </div>
+    <p style="font-size:11px;color:var(--text-dim);margin-top:8px;">💡 Obtenha sua key em <a href="https://console.anthropic.com" target="_blank" style="color:var(--accent)">console.anthropic.com</a> · Paralelo recomendado: 3 (evita rate limit com muitos arquivos)</p>
+  </div>
+
+  <div class="section">
+    <div class="section-title">03 · Processar</div>
+    <div class="actions">
+      <button class="btn btn-primary" id="processBtn" disabled onclick="processAll()">⚡ Extrair Dados com IA</button>
+      <button class="btn btn-outline" id="clearBtn" onclick="clearAll()" style="display:none;">🗑 Limpar Tudo</button>
+      <button class="btn btn-outline" id="retryBtn" onclick="retryErrors()" style="display:none;font-size:12px;padding:8px 16px;">🔄 Retentar Erros</button>
+    </div>
+    <div id="progressArea" style="display:none;margin-top:18px;">
+      <div class="progress-wrapper">
+        <div class="progress-header">
+          <span class="progress-label" id="progressLabel">Processando...</span>
+          <span class="progress-count" id="progressCount">0 / 0</span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+      </div>
+      <div class="slots-row" id="slotsRow"></div>
+      <div class="log-area" id="logArea"></div>
+    </div>
+  </div>
+
+  <div class="section results-section" id="resultsSection">
+    <div class="section-title">04 · Resultados</div>
+    <div class="stats-row" id="statsRow"></div>
+    <div class="table-wrapper">
+      <table>
+        <thead><tr>
+          <th>#</th><th>Nº PROCESSO</th><th>RECLAMANTE</th><th>COMARCA</th>
+          <th>TIPO</th><th>SEÇÕES</th><th>FASE</th><th>RESULTADO</th><th></th>
+        </tr></thead>
+        <tbody id="resultsBody"></tbody>
+      </table>
+    </div>
+    <div class="actions" style="margin-top:18px;">
+      <button class="btn btn-success" onclick="downloadExcel()">📥 Baixar Excel Completo</button>
+      <button class="btn btn-outline" onclick="addMoreFiles()">➕ Adicionar Mais PDFs</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalOverlay" onclick="if(event.target===this)closeModalDirect()">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modalTitle">Detalhes</h3>
+      <button class="modal-close" onclick="closeModalDirect()">✕</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<script>
+let files = [];
+let extractedData = [];
+let isProcessing = false;
+
+const COLS = [
+  {k:'numero_processo',l:'NÚMERO DO PROCESSO',s:null},
+  {k:'tipo_acao',l:'TIPO DE AÇÃO',s:null},
+  {k:'nome_reclamante',l:'NOME DO RECLAMANTE',s:null},
+  {k:'status_reclamante',l:'STATUS DO RECLAMANTE',s:null},
+  {k:'funcao_reclamante',l:'FUNÇÃO DO RECLAMANTE',s:null},
+  {k:'data_admissao',l:'DATA DE ADMISSÃO',s:null},
+  {k:'data_demissao',l:'DATA DE DEMISSÃO',s:null},
+  {k:'modalidade_rescisao',l:'MODALIDADE DA RESCISÃO',s:null},
+  {k:'comarca',l:'COMARCA',s:null},
+  {k:'vara',l:'VARA',s:null},
+  {k:'data_ajuizamento',l:'DATA DO AJUIZAMENTO',s:null},
+  {k:'reclamada',l:'RECLAMADA',s:null},
+  {k:'centro_custo',l:'CENTRO DE CUSTO/UNIDADE',s:null},
+  {k:'empresa_terceirizada',l:'EMPRESA TERCEIRIZADA',s:null},
+  {k:'ini_do_at',l:'DO/AT',s:'INICIAL'},
+  {k:'ini_reintegracao',l:'REINTEGRAÇÃO',s:'INICIAL'},
+  {k:'ini_periculosidade',l:'PERICULOSIDADE',s:'INICIAL'},
+  {k:'ini_insalubridade',l:'INSALUBRIDADE',s:'INICIAL'},
+  {k:'ini_rescisao_indireta',l:'RESCISÃO INDIRETA',s:'INICIAL'},
+  {k:'ini_danos_morais',l:'DANOS MORAIS',s:'INICIAL'},
+  {k:'ini_danos_materiais',l:'DANOS MATERIAIS',s:'INICIAL'},
+  {k:'ini_horas_extras',l:'HORAS EXTRAS',s:'INICIAL'},
+  {k:'ini_intrajornada',l:'INTRAJORNADA',s:'INICIAL'},
+  {k:'ini_horas_in_itinere',l:'HORAS IN ITINERE',s:'INICIAL'},
+  {k:'ini_acumulo_funcao',l:'ACÚMULO DE FUNÇÃO',s:'INICIAL'},
+  {k:'ini_equiparacao_salarial',l:'EQUIPARAÇÃO SALARIAL',s:'INICIAL'},
+  {k:'ini_rec_vinculo',l:'REC VÍNCULO',s:'INICIAL'},
+  {k:'ini_honorarios_advocaticios',l:'HONORÁRIOS ADVOCATÍCIOS',s:'INICIAL'},
+  {k:'ini_outros',l:'OUTROS',s:'INICIAL'},
+  {k:'valor_causa',l:'VALOR DA CAUSA',s:null},
+  {k:'advogado_reclamante',l:'ADVOGADO RECLAMANTE',s:null},
+  {k:'liminar',l:'LIMINAR',s:null},
+  {k:'processo_apenso_tipo',l:'PROCESSO APENSO - TIPO',s:null},
+  {k:'processo_apenso_numero',l:'PROCESSO APENSO - NÚMERO',s:null},
+  {k:'perito_psiquiatra',l:'PERITO MÉDICO PSIQUIATRA',s:null},
+  {k:'perito_ergonomico',l:'PERITO ERGONOMICO',s:null},
+  {k:'perito_tecnico',l:'PERITO TÉCNICO',s:null},
+  {k:'honorarios_periciais',l:'HONORÁRIOS PERICIAIS PRÉVIOS',s:null},
+  {k:'laudo_do_mental',l:'DO - MENTAL',s:'LAUDO'},
+  {k:'laudo_grau_mental',l:'GRAU MENTAL',s:'LAUDO'},
+  {k:'laudo_do_ergonomica',l:'DO - ERGONÔMICA',s:'LAUDO'},
+  {k:'laudo_grau_ergonomico',l:'GRAU ERGONÔMICO',s:'LAUDO'},
+  {k:'laudo_incapacidade',l:'INCAPACIDADE',s:'LAUDO'},
+  {k:'laudo_acidente_trabalho',l:'ACIDENTE DE TRABALHO',s:'LAUDO'},
+  {k:'laudo_periculosidade',l:'PERICULOSIDADE',s:'LAUDO'},
+  {k:'laudo_insalubridade',l:'INSALUBRIDADE',s:'LAUDO'},
+  {k:'laudo_grau_insalubridade',l:'GRAU INSALUBRIDADE',s:'LAUDO'},
+  {k:'testemunha_reclamada',l:'TESTEMUNHA RECLAMADA',s:null},
+  {k:'testemunha_reclamante',l:'TESTEMUNHA RECLAMANTE',s:null},
+  {k:'sent_do_mental',l:'DO - MENTAL',s:'SENTENÇA'},
+  {k:'sent_do_ergonomica',l:'DO - ERGONÔMICA',s:'SENTENÇA'},
+  {k:'sent_incapacidade',l:'INCAPACIDADE',s:'SENTENÇA'},
+  {k:'sent_acidente_trabalho',l:'ACIDENTE DE TRABALHO',s:'SENTENÇA'},
+  {k:'sent_periculosidade',l:'PERICULOSIDADE',s:'SENTENÇA'},
+  {k:'sent_insalubridade',l:'INSALUBRIDADE',s:'SENTENÇA'},
+  {k:'sent_reintegracao',l:'REINTEGRAÇÃO',s:'SENTENÇA'},
+  {k:'sent_rescisao_indireta',l:'RESCISÃO INDIRETA',s:'SENTENÇA'},
+  {k:'sent_danos_morais',l:'DANOS MORAIS',s:'SENTENÇA'},
+  {k:'sent_danos_materiais',l:'DANOS MATERIAIS',s:'SENTENÇA'},
+  {k:'sent_horas_extras',l:'HORAS EXTRAS',s:'SENTENÇA'},
+  {k:'sent_intrajornada',l:'INTRAJORNADA',s:'SENTENÇA'},
+  {k:'sent_horas_in_itinere',l:'HORAS IN ITINERE',s:'SENTENÇA'},
+  {k:'sent_acumulo_funcao',l:'ACÚMULO FUNÇÃO',s:'SENTENÇA'},
+  {k:'sent_equiparacao_salarial',l:'EQUIPARAÇÃO SALARIAL',s:'SENTENÇA'},
+  {k:'sent_reconhecimento_vinculo',l:'RECONHECIMENTO DE VÍNCULO',s:'SENTENÇA'},
+  {k:'sent_honorarios_advocaticios',l:'HONORÁRIOS ADVOCATÍCIOS',s:'SENTENÇA'},
+  {k:'sent_obrigacao_fazer',l:'OBRIGAÇÃO DE FAZER',s:'SENTENÇA'},
+  {k:'sent_outros',l:'OUTROS',s:'SENTENÇA'},
+  {k:'ac_do_mental',l:'DO - MENTAL',s:'ACÓRDÃO'},
+  {k:'ac_do_ergonomica',l:'DO - ERGONÔMICA',s:'ACÓRDÃO'},
+  {k:'ac_incapacidade',l:'INCAPACIDADE',s:'ACÓRDÃO'},
+  {k:'ac_acidente_trabalho',l:'ACIDENTE DE TRABALHO',s:'ACÓRDÃO'},
+  {k:'ac_periculosidade',l:'PERICULOSIDADE',s:'ACÓRDÃO'},
+  {k:'ac_insalubridade',l:'INSALUBRIDADE',s:'ACÓRDÃO'},
+  {k:'ac_reintegracao',l:'REINTEGRAÇÃO',s:'ACÓRDÃO'},
+  {k:'ac_rescisao_indireta',l:'RESCISÃO INDIRETA',s:'ACÓRDÃO'},
+  {k:'ac_danos_morais',l:'DANOS MORAIS',s:'ACÓRDÃO'},
+  {k:'ac_danos_materiais',l:'DANOS MATERIAIS',s:'ACÓRDÃO'},
+  {k:'ac_horas_extras',l:'HORAS EXTRAS',s:'ACÓRDÃO'},
+  {k:'ac_intrajornada',l:'INTRAJORNADA',s:'ACÓRDÃO'},
+  {k:'ac_horas_in_itinere',l:'HORAS IN ITINERE',s:'ACÓRDÃO'},
+  {k:'ac_acumulo_funcao',l:'ACÚMULO FUNÇÃO',s:'ACÓRDÃO'},
+  {k:'ac_equiparacao_salarial',l:'EQUIPARAÇÃO SALARIAL',s:'ACÓRDÃO'},
+  {k:'ac_reconhecimento_vinculo',l:'RECONHECIMENTO DE VÍNCULO',s:'ACÓRDÃO'},
+  {k:'ac_honorarios_advocaticios',l:'HONORÁRIOS ADVOCATÍCIOS',s:'ACÓRDÃO'},
+  {k:'ac_obrigacao_fazer',l:'OBRIGAÇÃO DE FAZER',s:'ACÓRDÃO'},
+  {k:'ac_outros',l:'OUTROS',s:'ACÓRDÃO'},
+  {k:'depositos_recursais',l:'DEPÓSITOS RECURSAIS',s:null},
+  {k:'apolice',l:'APÓLICE',s:null},
+  {k:'custas_processuais',l:'CUSTAS PROCESSUAIS',s:null},
+  {k:'depositos_judiciais',l:'DEPÓSITOS JUDICIAIS',s:null},
+  {k:'provavel',l:'PROVÁVEL',s:null},
+  {k:'possivel',l:'POSSÍVEL',s:null},
+  {k:'remoto',l:'REMOTO',s:null},
+  {k:'fase_processual',l:'FASE PROCESSUAL',s:null},
+  {k:'instancia',l:'INSTÂNCIA',s:null},
+  {k:'resultado_acao',l:'RESULTADO DA AÇÃO',s:null},
+  {k:'valor_acordo',l:'VALOR ACORDO',s:null},
+  {k:'data_arquivamento',l:'DATA DO ARQUIVAMENTO',s:null},
+];
+
+window.addEventListener('DOMContentLoaded', () => {
+  const saved = localStorage.getItem('rfg_api_key');
+  if (saved) { document.getElementById('apiKey').value = saved; document.getElementById('saveKey').checked = true; }
+  const dz = document.getElementById('dropZone');
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+  dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag-over'); handleFiles(e.dataTransfer.files); });
+  document.getElementById('fileInput').addEventListener('change', e => handleFiles(e.target.files));
+});
+
+function handleFiles(list) {
+  let added = 0;
+  for (const f of list) {
+    if (f.type !== 'application/pdf') continue;
+    if (files.find(x => x.file.name === f.name && x.file.size === f.size)) continue;
+    files.push({ file: f, status: 'pending', data: null, retries: 0, sections: [] });
+    added++;
+  }
+  if (added) renderFileList();
+  updateUI();
+}
+
+function renderFileList() {
+  const el = document.getElementById('fileList');
+  el.innerHTML = '';
+  files.forEach((item, i) => {
+    const sm = { pending:['s-pending','Aguardando'], queued:['s-queued','Na fila'], processing:['s-processing','<span class="spinner"></span> Processando'], retrying:['s-retrying','🔄 Retentando'], done:['s-done','✓ Concluído'], error:['s-error','✗ Erro'] };
+    const [cls, txt] = sm[item.status] || sm.pending;
+    const div = document.createElement('div');
+    div.className = 'file-item'; div.id = `fi-${i}`;
+    const inProg = ['processing','retrying'].includes(item.status);
+    div.innerHTML = `
+      <span class="file-icon">📄</span>
+      <div class="file-info">
+        <div class="file-name">${item.file.name}</div>
+        <div class="file-meta">
+          <span>${(item.file.size/1024/1024).toFixed(1)} MB</span>
+          ${item.retries>0?`<span style="color:var(--warning)">tentativa ${item.retries+1}</span>`:''}
+          ${item.sections.map(s=>`<span style="color:var(--accent2);font-size:9px">${s}</span>`).join('')}
+        </div>
+        <div class="file-progress ${inProg?'vis':''}"><div class="file-progress-fill" style="width:${item.status==='done'?'100':'0'}%"></div></div>
+      </div>
+      <span class="file-status ${cls}">${txt}</span>
+      ${['pending','error'].includes(item.status)?`<button class="file-remove" onclick="removeFile(${i})">✕</button>`:''}
+    `;
+    el.appendChild(div);
+  });
+  const countEl = document.getElementById('fileCount');
+  if (files.length) {
+    countEl.style.display = 'block';
+    const p=files.filter(f=>f.status==='pending').length, d=files.filter(f=>f.status==='done').length, e=files.filter(f=>f.status==='error').length;
+    countEl.textContent = `${files.length} arquivo(s) · ${d} concluídos · ${p} aguardando${e?' · '+e+' com erro':''}`;
+  } else countEl.style.display='none';
+}
+
+function updateFileItemStatus(i) {
+  const item = files[i];
+  const el = document.getElementById(`fi-${i}`);
+  if (!el) return;
+  const sm = { pending:['s-pending','Aguardando'], queued:['s-queued','Na fila'], processing:['s-processing','<span class="spinner"></span> Processando'], retrying:['s-retrying','🔄 Retentando'], done:['s-done','✓ Concluído'], error:['s-error','✗ Erro'] };
+  const [cls, txt] = sm[item.status] || sm.pending;
+  const sEl = el.querySelector('.file-status');
+  if (sEl) { sEl.className = `file-status ${cls}`; sEl.innerHTML = txt; }
+  const prog = el.querySelector('.file-progress');
+  if (prog) {
+    const inProg = ['processing','retrying'].includes(item.status);
+    inProg ? prog.classList.add('vis') : prog.classList.remove('vis');
+    if (item.status==='done') { const fill=prog.querySelector('.file-progress-fill'); if(fill) fill.style.width='100%'; }
+  }
+  // update meta
+  const meta = el.querySelector('.file-meta');
+  if (meta) {
+    meta.innerHTML = `<span>${(item.file.size/1024/1024).toFixed(1)} MB</span>${item.retries>0?`<span style="color:var(--warning)">tentativa ${item.retries+1}</span>`:''}${item.sections.map(s=>`<span style="color:var(--accent2);font-size:9px">${s}</span>`).join('')}`;
+  }
+}
+
+function removeFile(i) { files.splice(i, 1); renderFileList(); updateUI(); }
+function addMoreFiles() { document.getElementById('fileInput').click(); }
+function updateUI() {
+  const pending = files.filter(f=>f.status==='pending').length;
+  const errors = files.filter(f=>f.status==='error').length;
+  document.getElementById('processBtn').disabled = pending===0||isProcessing;
+  document.getElementById('clearBtn').style.display = files.length>0?'inline-flex':'none';
+  document.getElementById('retryBtn').style.display = errors>0?'inline-flex':'none';
+}
+function clearAll() { if(isProcessing)return; files=[]; extractedData=[]; renderFileList(); updateUI(); document.getElementById('resultsSection').classList.remove('visible'); document.getElementById('progressArea').style.display='none'; }
+function retryErrors() { files.filter(f=>f.status==='error').forEach(f=>{f.status='pending';f.retries=0;}); renderFileList(); updateUI(); }
+
+async function processAll() {
+  const apiKey = document.getElementById('apiKey').value.trim();
+  if (!apiKey) { alert('Insira sua Anthropic API Key.'); return; }
+  if (document.getElementById('saveKey').checked) localStorage.setItem('rfg_api_key', apiKey);
+
+  const concurrency = Math.min(5, Math.max(1, parseInt(document.getElementById('concurrency').value)||3));
+  const maxRetry = Math.min(5, Math.max(1, parseInt(document.getElementById('maxRetry').value)||2));
+
+  isProcessing = true; updateUI();
+  document.getElementById('progressArea').style.display = 'block';
+  document.getElementById('logArea').innerHTML = '';
+
+  const queue = files.map((_,i)=>i).filter(i=>files[i].status==='pending');
+  const total = queue.length;
+  let done = 0;
+
+  queue.forEach(i => { files[i].status='queued'; updateFileItemStatus(i); });
+  renderSlots(concurrency);
+  updateFileCountBar();
+  log('info', `Iniciando ${total} arquivo(s) · ${concurrency} paralelos · ${maxRetry} tentativas por erro`);
+
+  const workers = Array.from({length:concurrency},(_,slot)=>(async()=>{
+    while(queue.length>0){
+      const fi = queue.shift();
+      if(fi===undefined) break;
+      const item = files[fi];
+      setSlot(slot,'active',item.file.name);
+      item.status='processing'; updateFileItemStatus(fi);
+
+      let ok=false;
+      while(item.retries<=maxRetry && !ok){
+        if(item.retries>0){
+          item.status='retrying'; updateFileItemStatus(fi);
+          log('warn',`🔄 Retry ${item.retries}/${maxRetry}: ${item.file.name}`);
+          await sleep(1800*item.retries);
+        }
+        try{
+          const b64 = await fileToBase64(item.file);
+          const result = await callAPI(b64, apiKey);
+          item.data=result;
+          item.sections=detectSections(result);
+          extractedData.push(result);
+          item.status='done'; updateFileItemStatus(fi);
+          log('ok',`✓ ${item.file.name} → ${result.numero_processo||'extraído'} [${item.sections.join(', ')||'geral'}]`);
+          ok=true;
+        }catch(e){
+          item.retries++;
+          if(item.retries>maxRetry){ item.status='error'; updateFileItemStatus(fi); log('err',`✗ ${item.file.name}: ${e.message}`); }
+        }
+      }
+      done++;
+      const pct=Math.round(done/total*100);
+      document.getElementById('progressFill').style.width=pct+'%';
+      document.getElementById('progressCount').textContent=`${done} / ${total}`;
+      document.getElementById('progressLabel').textContent=done<total?'Processando...':'Concluído!';
+      setSlot(slot,'idle','');
+      updateFileCountBar();
+    }
+    setSlot(slot,'done','—');
+  })());
+
+  await Promise.all(workers);
+  isProcessing=false; updateUI();
+
+  const errs=files.filter(f=>f.status==='error').length;
+  if(errs) log('warn',`⚠ ${errs} arquivo(s) com erro. Use "Retentar Erros" para tentar novamente.`);
+  log('info',`✅ Processamento concluído · ${extractedData.length} extraídos · ${errs} erros`);
+  if(extractedData.length>0) renderResults();
+}
+
+function updateFileCountBar(){
+  const p=files.filter(f=>f.status==='pending').length, d=files.filter(f=>f.status==='done').length, e=files.filter(f=>f.status==='error').length;
+  const el=document.getElementById('fileCount');
+  if(el&&files.length) el.textContent=`${files.length} arquivo(s) · ${d} concluídos · ${p} aguardando${e?' · '+e+' com erro':''}`;
+}
+
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+
+function detectSections(d){
+  const secs=[];
+  if(COLS.filter(c=>c.s==='INICIAL').some(c=>d[c.k]!==null&&d[c.k]!==undefined)) secs.push('Inicial');
+  if(COLS.filter(c=>c.s==='LAUDO').some(c=>d[c.k]!==null&&d[c.k]!==undefined)) secs.push('Laudo');
+  if(COLS.filter(c=>c.s==='SENTENÇA').some(c=>d[c.k]!==null&&d[c.k]!==undefined)) secs.push('Sentença');
+  if(COLS.filter(c=>c.s==='ACÓRDÃO').some(c=>d[c.k]!==null&&d[c.k]!==undefined)) secs.push('Acórdão');
+  return secs;
+}
+
+let slots=[];
+function renderSlots(n){
+  slots=Array.from({length:n},(_,i)=>({idx:i}));
+  const row=document.getElementById('slotsRow'); row.innerHTML='';
+  slots.forEach((_,i)=>{
+    const d=document.createElement('div'); d.className='slot'; d.id=`slot-${i}`;
+    d.innerHTML=`<div class="slot-dot"></div><span class="slot-name">Aguardando</span>`; row.appendChild(d);
+  });
+}
+function setSlot(i,status,name){
+  const el=document.getElementById(`slot-${i}`); if(!el)return;
+  el.className=`slot ${status}`;
+  el.querySelector('.slot-name').textContent=name||'—';
+}
+
+async function fileToBase64(file){
+  return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result.split(',')[1]); r.onerror=()=>rej(new Error('Falha ao ler arquivo')); r.readAsDataURL(file); });
+}
+
+async function callAPI(base64, apiKey){
+  const resp = await fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    body:JSON.stringify({
+      model:'claude-sonnet-4-20250514',
+      max_tokens:4000,
+      system:'Você é especialista em análise de processos trabalhistas brasileiros. Identifica automaticamente o tipo de documento (petição inicial, sentença, acórdão, laudo pericial ou combinação) e extrai todas as informações com máxima precisão. Retorne APENAS JSON válido, sem markdown, sem texto extra.',
+      messages:[{role:'user',content:[
+        {type:'document',source:{type:'base64',media_type:'application/pdf',data:base64}},
+        {type:'text',text:`Analise este documento trabalhista e extraia TODAS as informações disponíveis. Retorne JSON com estas chaves:\n${COLS.map(c=>`"${c.k}": // ${c.s?'['+c.s+'] ':''}${c.l}`).join('\n')}\n\nRegras:\n- Booleanos: true/false\n- Textos ausentes: null\n- Datas: "DD/MM/AAAA"\n- Valores: número sem formatação\n- tipo_acao: RECLAMACAO TRABALHISTA|ACAO CIVIL PUBLICA|HOMOLOGACAO DE ACORDO EXTRAJUDICIAL|DISSIDIO COLETIVO\n- status_reclamante: ATIVO|DESLIGADO|TERCEIRO\n- modalidade_rescisao: JUSTA CAUSA|DISPENSA IMOTIVADA|ACORDO MUTUO|PEDIDO DE DEMISSAO|PRAZO DETERMINADO\n- fase_processual: CONHECIMENTO|RECURSAL|EXECUCAO\n- instancia: PRIMEIRA|SEGUNDA|TERCEIRA|ARQUIVADO\n- resultado_acao: PROCEDENTE|PARCIALMENTE PROCEDENTE|IMPROCEDENTE|ACORDO|EXTINTO SEM MERITO\n- laudo_do_mental/ergonomica: CAUSA|CONCAUSA|SEM NEXO\n- incapacidade: CAPAZ|INCAPAZ\n- Seções não presentes no documento: campos null\nRetorne SOMENTE o JSON.`}
+      ]}]
+    })
+  });
+  if(!resp.ok){
+    const err=await resp.json().catch(()=>({}));
+    if(resp.status===429) throw new Error('Rate limit — aguarde e retente');
+    throw new Error(err.error?.message||`HTTP ${resp.status}`);
+  }
+  const data=await resp.json();
+  const text=data.content.map(b=>b.text||'').join('');
+  const clean=text.replace(/```json|```/g,'').trim();
+  try{return JSON.parse(clean);}catch{const m=clean.match(/\{[\s\S]*\}/);if(m)return JSON.parse(m[0]);throw new Error('Resposta inválida da IA');}
+}
+
+function renderResults(){
+  document.getElementById('resultsSection').classList.add('visible');
+  const total=extractedData.length;
+  const comResult=extractedData.filter(d=>d.resultado_acao).length;
+  const acordos=extractedData.filter(d=>d.resultado_acao==='ACORDO').length;
+  const comLaudo=extractedData.filter(d=>d.laudo_do_mental||d.laudo_do_ergonomica).length;
+  document.getElementById('statsRow').innerHTML=`
+    <div class="stat-card"><div class="stat-value">${total}</div><div class="stat-label">Processos</div></div>
+    <div class="stat-card"><div class="stat-value" style="color:var(--accent2)">${comResult}</div><div class="stat-label">Com Resultado</div></div>
+    <div class="stat-card"><div class="stat-value" style="color:var(--warning)">${acordos}</div><div class="stat-label">Acordos</div></div>
+    <div class="stat-card"><div class="stat-value" style="color:var(--accent)">${comLaudo}</div><div class="stat-label">Com Laudo</div></div>`;
+  const tbody=document.getElementById('resultsBody'); tbody.innerHTML='';
+  extractedData.forEach((d,i)=>{
+    const secs=detectSections(d);
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td style="color:var(--text-dim);font-size:11px">${i+1}</td><td class="pnum">${d.numero_processo||'—'}</td><td>${d.nome_reclamante||'—'}</td><td>${d.comarca||'—'}</td><td style="font-size:11px">${d.tipo_acao?d.tipo_acao.split(' ').slice(0,2).join(' ')+'…':'—'}</td><td>${secs.map(s=>`<span class="sec-tag">${s}</span>`).join(' ')||'—'}</td><td>${d.fase_processual?`<span class="tag tag-fase">${d.fase_processual}</span>`:'—'}</td><td>${d.resultado_acao?`<span class="tag tag-result">${d.resultado_acao}</span>`:'—'}</td><td><button class="expand-btn" onclick="showDetail(${i})">Ver tudo</button></td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function showDetail(idx){
+  const d=extractedData[idx];
+  document.getElementById('modalTitle').textContent=`Processo ${d.numero_processo||'#'+(idx+1)}`;
+  const groups={'Dados Gerais':COLS.filter(c=>!c.s),'Pedidos Iniciais':COLS.filter(c=>c.s==='INICIAL'),'Laudo Pericial':COLS.filter(c=>c.s==='LAUDO'),'Sentença':COLS.filter(c=>c.s==='SENTENÇA'),'Acórdão':COLS.filter(c=>c.s==='ACÓRDÃO')};
+  let html='';
+  for(const [title,cols] of Object.entries(groups)){
+    const present=cols.filter(c=>d[c.k]!==null&&d[c.k]!==undefined);
+    if(!present.length) continue;
+    html+=`<div class="sg"><div class="sg-title">${title}</div><div class="fg">`;
+    for(const col of present){
+      const val=d[col.k]; let disp=val,cls='';
+      if(typeof val==='boolean'){disp=val?'✓ SIM':'✗ NÃO';cls=val?'t':'f';}
+      html+=`<div class="fi"><div class="fl">${col.l}</div><div class="fv ${cls}">${disp}</div></div>`;
+    }
+    html+='</div></div>';
+  }
+  document.getElementById('modalBody').innerHTML=html||'<p style="color:var(--text-dim)">Nenhum dado disponível.</p>';
+  document.getElementById('modalOverlay').classList.add('open');
+}
+function closeModalDirect(){document.getElementById('modalOverlay').classList.remove('open');}
+
+function downloadExcel(){
+  if(!extractedData.length) return;
+  const wb=XLSX.utils.book_new();
+  const secRow=COLS.map(c=>c.s||'');
+  const hdrRow=COLS.map(c=>c.l);
+  const dataRows=extractedData.map(d=>COLS.map(c=>{ const v=d[c.k]; if(v===null||v===undefined)return''; return v; }));
+  const ws=XLSX.utils.aoa_to_sheet([secRow,hdrRow,...dataRows]);
+  ws['!cols']=COLS.map(()=>({wch:20}));
+  XLSX.utils.book_append_sheet(wb,ws,'Planilha1');
+  const date=new Date().toISOString().split('T')[0];
+  XLSX.writeFile(wb,`Dashboard_RFG_${date}.xlsx`);
+  log('ok',`📥 Excel exportado · ${extractedData.length} processos · ${date}`);
+}
+
+function log(type,msg){
+  const area=document.getElementById('logArea');
+  const now=new Date().toLocaleTimeString('pt-BR');
+  const line=document.createElement('div'); line.className=`log-line ${type}`;
+  line.innerHTML=`<span class="log-time">${now}</span><span class="log-msg">${msg}</span>`;
+  area.appendChild(line); area.scrollTop=area.scrollHeight;
+}
+</script>
+</body>
+</html>
