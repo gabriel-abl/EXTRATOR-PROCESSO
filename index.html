@@ -154,7 +154,7 @@ td.pnum{font-family:'DM Mono',monospace;color:var(--accent);font-size:11px;}
       <span class="badge">v3.0 · RFG</span>
     </div>
   </header>
- 
+
   <div class="section">
     <div class="section-title">01 · Upload de PDFs</div>
     <div class="info-box">
@@ -169,7 +169,7 @@ td.pnum{font-family:'DM Mono',monospace;color:var(--accent);font-size:11px;}
     <div class="file-list" id="fileList"></div>
     <div id="fileCount" style="font-size:11px;color:var(--text-dim);margin-top:10px;display:none;"></div>
   </div>
- 
+
   <div class="section">
     <div class="section-title">02 · Configuração</div>
     <div class="config-grid">
@@ -196,7 +196,7 @@ td.pnum{font-family:'DM Mono',monospace;color:var(--accent);font-size:11px;}
     </div>
     <p style="font-size:11px;color:var(--text-dim);margin-top:8px;">💡 Obtenha sua key em <a href="https://console.anthropic.com" target="_blank" style="color:var(--accent)">console.anthropic.com</a> · "Págs por bloco": quantas páginas por divisão (40 recomendado)</p>
   </div>
- 
+
   <div class="section">
     <div class="section-title">03 · Processar</div>
     <div class="actions">
@@ -216,7 +216,7 @@ td.pnum{font-family:'DM Mono',monospace;color:var(--accent);font-size:11px;}
       <div class="log-area" id="logArea"></div>
     </div>
   </div>
- 
+
   <div class="section results-section" id="resultsSection">
     <div class="section-title">04 · Resultados</div>
     <div class="stats-row" id="statsRow"></div>
@@ -235,7 +235,7 @@ td.pnum{font-family:'DM Mono',monospace;color:var(--accent);font-size:11px;}
     </div>
   </div>
 </div>
- 
+
 <div class="modal-overlay" id="modalOverlay" onclick="if(event.target===this)closeModalDirect()">
   <div class="modal">
     <div class="modal-header">
@@ -245,17 +245,17 @@ td.pnum{font-family:'DM Mono',monospace;color:var(--accent);font-size:11px;}
     <div class="modal-body" id="modalBody"></div>
   </div>
 </div>
- 
+
 <script>
 // pdf.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
- 
+
 // ─── State ────────────────────────────────────────────────────────────────────
 let files = [];
 let extractedData = [];
 let isProcessing = false;
 const MAX_CHUNK_MB = 25;
- 
+
 // ─── Columns ──────────────────────────────────────────────────────────────────
 const COLS = [
   {k:'numero_processo',l:'NÚMERO DO PROCESSO',s:null},
@@ -358,7 +358,7 @@ const COLS = [
   {k:'valor_acordo',l:'VALOR ACORDO',s:null},
   {k:'data_arquivamento',l:'DATA DO ARQUIVAMENTO',s:null},
 ];
- 
+
 // ─── Init ─────────────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
   const saved = localStorage.getItem('rfg_api_key');
@@ -369,7 +369,7 @@ window.addEventListener('DOMContentLoaded', () => {
   dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag-over'); handleFiles(e.dataTransfer.files); });
   document.getElementById('fileInput').addEventListener('change', e => handleFiles(e.target.files));
 });
- 
+
 function handleFiles(list) {
   let added = 0;
   for (const f of list) {
@@ -382,7 +382,7 @@ function handleFiles(list) {
   if (added) renderFileList();
   updateUI();
 }
- 
+
 function renderFileList() {
   const el = document.getElementById('fileList');
   el.innerHTML = '';
@@ -425,7 +425,7 @@ function renderFileList() {
   });
   updateFileCountLabel();
 }
- 
+
 function updateFileItem(i) {
   // Full re-render of just this item (simpler than patching DOM)
   const old = document.getElementById(`fi-${i}`);
@@ -465,7 +465,7 @@ function updateFileItem(i) {
   `;
   updateFileCountLabel();
 }
- 
+
 function setChunkStatus(fi, ci, status) {
   if (files[fi]) {
     if (files[fi].chunks[ci]) files[fi].chunks[ci].status = status;
@@ -473,7 +473,7 @@ function setChunkStatus(fi, ci, status) {
     if (el) { el.className = `chunk-badge ${status}`; }
   }
 }
- 
+
 function updateFileCountLabel() {
   const el = document.getElementById('fileCount');
   if (!files.length) { el.style.display='none'; return; }
@@ -481,7 +481,7 @@ function updateFileCountLabel() {
   el.style.display='block';
   el.textContent=`${files.length} arquivo(s) · ${d} concluídos · ${p} aguardando${e?' · '+e+' com erro':''}`;
 }
- 
+
 function removeFile(i) { files.splice(i, 1); renderFileList(); updateUI(); }
 function addMoreFiles() { document.getElementById('fileInput').click(); }
 function updateUI() {
@@ -493,20 +493,20 @@ function updateUI() {
 }
 function clearAll() { if(isProcessing)return; files=[]; extractedData=[]; renderFileList(); updateUI(); document.getElementById('resultsSection').classList.remove('visible'); document.getElementById('progressArea').style.display='none'; }
 function retryErrors() { files.filter(f=>f.status==='error').forEach(f=>{f.status='pending';f.retries=0;f.chunks=[];f.chunkResults=[];}); renderFileList(); updateUI(); }
- 
+
 // ─── PDF Splitting ────────────────────────────────────────────────────────────
 async function splitPdfIntoChunks(file, pagesPerChunk) {
   // Load the PDF with pdf.js to count pages
   const arrayBuffer = await file.arrayBuffer();
   const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
   const totalPages = pdfDoc.numPages;
- 
+
   // Dynamic import of pdf-lib for splitting
   const { PDFDocument } = await loadPdfLib();
- 
+
   const srcDoc = await PDFDocument.load(arrayBuffer);
   const chunks = [];
- 
+
   for (let start = 0; start < totalPages; start += pagesPerChunk) {
     const end = Math.min(start + pagesPerChunk - 1, totalPages - 1);
     const chunkDoc = await PDFDocument.create();
@@ -522,10 +522,10 @@ async function splitPdfIntoChunks(file, pagesPerChunk) {
       status: 'pending',
     });
   }
- 
+
   return chunks;
 }
- 
+
 // Lazy-load pdf-lib from CDN
 let pdfLibModule = null;
 async function loadPdfLib() {
@@ -538,41 +538,41 @@ async function loadPdfLib() {
     document.head.appendChild(script);
   });
 }
- 
+
 // ─── Main processor ───────────────────────────────────────────────────────────
 async function processAll() {
   const apiKey = document.getElementById('apiKey').value.trim();
   if (!apiKey) { alert('Insira sua Anthropic API Key.'); return; }
   if (document.getElementById('saveKey').checked) localStorage.setItem('rfg_api_key', apiKey);
- 
+
   const concurrency   = Math.min(5, Math.max(1, parseInt(document.getElementById('concurrency').value)||3));
   const maxRetry      = Math.min(5, Math.max(1, parseInt(document.getElementById('maxRetry').value)||2));
   const pagesPerChunk = Math.min(80, Math.max(10, parseInt(document.getElementById('pagesPerChunk').value)||40));
- 
+
   isProcessing = true; updateUI();
   document.getElementById('progressArea').style.display = 'block';
   document.getElementById('logArea').innerHTML = '';
- 
+
   const pending = files.filter(f=>f.status==='pending');
   const total = pending.length;
   let done = 0;
- 
+
   pending.forEach(f => { f.status='queued'; });
   renderFileList();
   renderSlots(concurrency);
   log('info', `Iniciando ${total} arquivo(s) · ${concurrency} paralelos · divisão a cada ${pagesPerChunk} páginas`);
- 
+
   // Build queue of file indices
   const queue = files.map((_,i)=>i).filter(i=>files[i].status==='queued');
- 
+
   const workers = Array.from({length:concurrency},(_,slot)=>(async()=>{
     while(queue.length>0){
       const fi = queue.shift();
       if(fi===undefined) break;
       const item = files[fi];
- 
+
       setSlot(slot, 'active', item.file.name);
- 
+
       let ok = false;
       while(item.retries <= maxRetry && !ok){
         if(item.retries > 0){
@@ -603,7 +603,7 @@ async function processAll() {
           }
         }
       }
- 
+
       done++;
       document.getElementById('progressFill').style.width = Math.round(done/total*100)+'%';
       document.getElementById('progressCount').textContent = `${done} / ${total}`;
@@ -612,78 +612,78 @@ async function processAll() {
     }
     setSlot(slot, 'done', '—');
   })());
- 
+
   await Promise.all(workers);
   isProcessing = false; updateUI();
- 
+
   const errs = files.filter(f=>f.status==='error').length;
   if(errs) log('warn', `⚠ ${errs} arquivo(s) com erro. Use "Retentar Erros".`);
   log('info', `✅ Concluído · ${extractedData.length} processos extraídos · ${errs} erros`);
   if(extractedData.length > 0) renderResults();
 }
- 
+
 async function processLargeFile(fi, item, apiKey, pagesPerChunk, slot) {
   item.status = 'splitting'; updateFileItem(fi);
   log('info', `✂️ Dividindo ${item.file.name}...`);
- 
+
   const chunks = await splitPdfIntoChunks(item.file, pagesPerChunk);
   item.chunks = chunks;
   updateFileItem(fi);
   log('info', `✂️ ${item.file.name} → ${chunks.length} blocos · processando em sequência`);
- 
+
   item.status = 'processing';
   const chunkResults = [];
- 
+
   for(let ci = 0; ci < chunks.length; ci++){
     const chunk = chunks[ci];
     setChunkStatus(fi, ci, 'active');
     setSlot(slot, 'active', `${item.file.name} · bloco ${ci+1}/${chunks.length}`);
     log('info', `  📄 Bloco ${ci+1}/${chunks.length} (págs ${chunk.pages})...`);
- 
+
     // Convert blob to base64
     const b64 = await blobToBase64(chunk.blob);
     const result = await callAPI(b64, apiKey, ci, chunks.length);
     chunkResults.push(result);
     setChunkStatus(fi, ci, 'done');
     log('ok', `  ✓ Bloco ${ci+1}/${chunks.length} extraído`);
- 
+
     // Small delay between chunks to avoid rate limit
     if(ci < chunks.length - 1) await sleep(500);
   }
- 
+
   item.status = 'merging'; updateFileItem(fi);
   log('info', `🔀 Consolidando ${chunks.length} blocos de ${item.file.name}...`);
- 
+
   const merged = mergeChunkResults(chunkResults);
   return merged;
 }
- 
+
 // Merge multiple chunk results into one record
 function mergeChunkResults(results) {
   if(results.length === 0) return {};
   if(results.length === 1) return results[0];
- 
+
   const merged = {};
- 
+
   for(const col of COLS){
     const k = col.k;
     // Collect all non-null values across chunks
     const vals = results.map(r=>r[k]).filter(v=>v!==null && v!==undefined && v!=='');
- 
+
     if(vals.length === 0){ merged[k] = null; continue; }
- 
+
     // For booleans: true wins over false (if any chunk says true, it's true)
     if(typeof vals[0] === 'boolean'){
       merged[k] = vals.some(v=>v===true);
       continue;
     }
- 
+
     // For numbers: take the last non-null (usually later in doc = more definitive)
     if(typeof vals[0] === 'number'){
       merged[k] = vals[vals.length-1];
       continue;
     }
- 
+
     // For text: take first non-null (header info usually at start)
     // But for result/fase/instancia: take last (end of doc is more definitive)
     const lastWins = ['resultado_acao','fase_processual','instancia','data_arquivamento','valor_acordo'];
@@ -693,12 +693,12 @@ function mergeChunkResults(results) {
       merged[k] = vals[0];
     }
   }
- 
+
   return merged;
 }
- 
+
 function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
- 
+
 function detectSections(d){
   const s=[];
   if(COLS.filter(c=>c.s==='INICIAL').some(c=>d[c.k]!=null)) s.push('Inicial');
@@ -707,7 +707,7 @@ function detectSections(d){
   if(COLS.filter(c=>c.s==='ACÓRDÃO').some(c=>d[c.k]!=null)) s.push('Acórdão');
   return s;
 }
- 
+
 // ─── Slots ────────────────────────────────────────────────────────────────────
 function renderSlots(n){
   const row=document.getElementById('slotsRow'); row.innerHTML='';
@@ -720,21 +720,21 @@ function setSlot(i,status,name){
   const el=document.getElementById(`slot-${i}`); if(!el)return;
   el.className=`slot ${status}`; el.querySelector('.slot-name').textContent=name||'—';
 }
- 
+
 // ─── API ──────────────────────────────────────────────────────────────────────
 async function fileToBase64(file){
   return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(',')[1]);r.onerror=()=>rej(new Error('Falha ao ler arquivo'));r.readAsDataURL(file);});
 }
- 
+
 async function blobToBase64(blob){
   return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(',')[1]);r.onerror=()=>rej(new Error('Falha ao converter blob'));r.readAsDataURL(blob);});
 }
- 
+
 async function callAPI(base64, apiKey, chunkIdx=null, totalChunks=null){
   const chunkContext = chunkIdx!==null
     ? `\nIMPORTANTE: Este é o bloco ${chunkIdx+1} de ${totalChunks} de um documento maior. Extraia todas as informações disponíveis neste trecho. Campos não presentes neste trecho devem ser null.`
     : '';
- 
+
   const resp = await fetch('https://api.anthropic.com/v1/messages',{
     method:'POST',
     headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
@@ -748,7 +748,7 @@ async function callAPI(base64, apiKey, chunkIdx=null, totalChunks=null){
       ]}]
     })
   });
- 
+
   if(!resp.ok){
     const err=await resp.json().catch(()=>({}));
     if(resp.status===429) throw new Error('Rate limit — aguarde e retente');
@@ -759,7 +759,7 @@ async function callAPI(base64, apiKey, chunkIdx=null, totalChunks=null){
   const clean=text.replace(/```json|```/g,'').trim();
   try{return JSON.parse(clean);}catch{const m=clean.match(/\{[\s\S]*\}/);if(m)return JSON.parse(m[0]);throw new Error('Resposta inválida da IA');}
 }
- 
+
 // ─── Results ──────────────────────────────────────────────────────────────────
 function renderResults(){
   document.getElementById('resultsSection').classList.add('visible');
@@ -780,7 +780,7 @@ function renderResults(){
     tbody.appendChild(tr);
   });
 }
- 
+
 function showDetail(idx){
   const d=extractedData[idx];
   document.getElementById('modalTitle').textContent=`Processo ${d.numero_processo||'#'+(idx+1)}`;
@@ -801,7 +801,7 @@ function showDetail(idx){
   document.getElementById('modalOverlay').classList.add('open');
 }
 function closeModalDirect(){document.getElementById('modalOverlay').classList.remove('open');}
- 
+
 // ─── Excel Export ─────────────────────────────────────────────────────────────
 function downloadExcel(){
   if(!extractedData.length) return;
@@ -816,7 +816,7 @@ function downloadExcel(){
   XLSX.writeFile(wb,`Dashboard_RFG_${date}.xlsx`);
   log('ok',`📥 Excel exportado · ${extractedData.length} processos · ${date}`);
 }
- 
+
 // ─── Log ──────────────────────────────────────────────────────────────────────
 function log(type,msg){
   const area=document.getElementById('logArea');
